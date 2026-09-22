@@ -1,0 +1,19 @@
+# data 
+data/
+
+# python 
+venv/
+__pycache__/
+*.pyc
+
+# models/artifacts
+models/
+mlruns/
+mlflow.db
+
+# feast 
+feature_repo/data/
+feature_repo/.feast/
+
+# env
+.env
