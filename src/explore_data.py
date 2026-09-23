@@ -168,3 +168,10 @@ if __name__ == "__main__":
 # All roughly doubled or more. Only contains_fish is more common in non-UPF food which makes sense as fish 
 # is more likely to be present in minimally processed food than UPFs. Could be useful features, soy in 
 # particular.
+
+
+
+
+
+
+        
