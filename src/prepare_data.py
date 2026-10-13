@@ -4,13 +4,13 @@ Cleans, engineers features, derives target and writes data/train.csv and
 data/test.csv.
 """
 import numpy as np
-import pandas as od
+import pandas as pd
 from sklearn.model_selection import train_test_split
 
 RAW_PATH = "data/raw/foods_health_scores_allergens.csv"
 
 NUTRITION_COLS = [
-    "energy_kcal", "fat_100g, saturated_fat_100g", "carbs_100g", "sugars_100g",
+    "energy_kcal", "fat_100g", "saturated_fat_100g", "carbs_100g", "sugars_100g",
     "fiber_100g", "proteins_100g", "salt_100g", "sodium_100g"
 ]
 
@@ -66,13 +66,73 @@ def clean_nutrition(df):
     return df
 
 def simplify_category(df):
-    pass
+    """
+    Creates a new top_category column with fewer unique values than the original 430.
+    Makes encoding possible.
+
+    Fills missing values with the literal string "unknown", splits on "," and takes first
+    element (which is a broad general tag) then strips any leading or tailing whitespace
+    left after the split
+    """
+    df["top_category"] = df["categories"].fillna("unknown").str.split(",").str[0].str.strip()
+    return df
 
 def clean_nutriscore(df):
-    pass
+    """
+    Removes nutriscore_grade column (EDA shows they have UNKNOWN, NOT-APPLICABLE and NaN) and collapses them 
+    into one consistent label ("unknown")
+    """
+    df["nutriscore_grade"] = (
+        df["nutriscore_grade"].replace({"UNKNOWN": "unknown", "NOT-APPLICABLE": "unknown"}).fillna("unknown")
+    )
+
+    return df
 
 def main():
-    pass
+    df = pd.read_csv(RAW_PATH)
+
+    # Only rows with a known NOVA group can be labelled
+    df = df.dropna(subset=["nova_group"]).copy()
+    df["is_ultra_processed"] = (df["nova_group"] == 4).astype(int)
+
+    # Duplicates: exact rows, then repeated product_name and brand pairs
+    df = df.drop_duplicates()
+    df = df.drop_duplicates(subset=["product_name", "brands"])
+
+    # Ingredients text drives the key engineered features so drop rows missing it
+    df = df.dropna(subset=["ingredients"])
+
+    df = clean_nutrition(df)
+    df = add_ingredient_features(df)
+    df = simplify_category(df)
+    df = clean_nutriscore(df)
+    df[ALLERGEN_COLS] = df[ALLERGEN_COLS].astype(int)
+
+    feature_cols = (
+        NUTRITION_COLS + ALLERGEN_COLS
+        + ["ingredient_count", "has_e_number", "has_additive_keyword", "top_category", "nutriscore_grade"]
+    )
+    df = df[feature_cols + ["is_ultra_processed"]]
+
+    train_df, test_df = train_test_split(
+        df, test_size = 0.2, stratify = df["is_ultra_processed"], random_state = 42
+    )
+
+    train_df.to_csv("data/train.csv", index=False)
+    test_df.to_csv("data/test.csv", index=False)
+
+    print("Dataset prepared")
+    print(f"Training set: {len(train_df):,} food items")
+    print(f"Test set: {len(test_df):,} food items")
+    print(f"Overall UPF ratio: {df["is_ultra_processed"].mean():.2%}")
+
+    non_upf_sugar = df.loc[df["is_ultra_processed"] == 0, "sugars_100g"].mean()
+    upf_sugar = df.loc[df["is_ultra_processed"] == 1, "sugars_100g"].mean()
+    print(f"\nNon-UPF items. Average sugars per 100g: {non_upf_sugar:.2f}g")
+    print(f"UPF items. Average sugars per 100g: {upf_sugar:.2f}g")
+
+    print("\nTop category distribution (UPF): ")
+    print(df.loc[df["is_ultra_processed"] == 1, "top_category"].value_counts(normalize=True).head(5))
 
 if __name__ == "__main__":
     main()
